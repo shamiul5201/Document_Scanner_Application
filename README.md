@@ -1,6 +1,6 @@
 # Document Scanner Application
 
-A simple document scanner built with Python and OpenCV that turns photos of documents into clear, high-quality scans. This script detects the document edges, transforms the perspective, and saves the final result as a neatly scanned document image.
+This script processes an image of a scanned document, identifies its boundaries, and applies a perspective transformation to produce a clean, top-down view of the document. The code is particularly useful for automating document digitization tasks, such as archiving paper forms or enhancing scanned images for Optical Character Recognition (OCR).
 
 ### Input Image
 ![scanned-form](https://github.com/user-attachments/assets/35281a89-52b1-4de0-ada7-faee69627750)
@@ -13,43 +13,110 @@ A simple document scanner built with Python and OpenCV that turns photos of docu
 
 ## Features
 
-- **Automatic Edge Detection**: Detects document boundaries to crop and adjust the perspective.
-- **Perspective Transform**: Maps the document to a top-down view.
-- **Grayscale and Blur Processing**: Improves edge detection by smoothing out noise.
+* Resizes and preprocesses the image.
+* Detects document boundaries using edge detection and contour analysis.
+* Applies a perspective transformation for a flattened, top-down view of the document.
 
-## How It Works
 
-The script uses a combination of grayscale conversion, Gaussian blur, and Canny edge detection to find the document's contours. It then applies a perspective transform to make the document appear as though it was scanned directly.
 
-## Code Overview
+## Code Walkthrough
 
-### 1. Import Libraries
-```python
-import cv2
-import numpy as np
-```
-### 2. Define the helper function
+### 1. Helper Function: mapp
+The mapp function reorders the four corners of a contour to ensure consistent perspective transformation. It identifies:
+
+`Top-left`
+`Top-right`
+`Bottom-right`
+`Bottom-left`
+Implementation:
 ```python
 def mapp(h):
-    # Rearranges corner points to standard order
     h = h.reshape((4, 2))
     hnew = np.zeros((4, 2), dtype=np.float32)
-    add = h.sum(1)
-    hnew[0] = h[np.argmin(add)]
-    hnew[2] = h[np.argmax(add)]
-    diff = np.diff(h, axis=1)
-    hnew[1] = h[np.argmin(diff)]
-    hnew[3] = h[np.argmax(diff)]
+
+    add = h.sum(1)  # Sum of x and y coordinates
+    hnew[0] = h[np.argmin(add)]  # Top-left corner
+    hnew[2] = h[np.argmax(add)]  # Bottom-right corner
+
+    diff = np.diff(h, axis=1)  # Difference between x and y
+    hnew[1] = h[np.argmin(diff)]  # Top-right corner
+    hnew[3] = h[np.argmax(diff)]  # Bottom-left corner
+
     return hnew
 ```
-The `mapp` function is designed to reorder four corner points of a document so that they’re in a consistent, standard order. When a document's corners are detected, the points can be arranged in any sequence, which can make it difficult to apply transformations. This function rearranges them to a fixed order: top-left, top-right, bottom-right, and bottom-left.
 
-It works by:
-1. Calculating the sum of each point’s x and y coordinates to find the top-left (smallest sum) and bottom-right (largest sum).
-2. Calculating the difference between each point’s x and y coordinates to identify the top-right (smallest difference) and bottom-left (largest difference).
+The function reshapes and reorders the points based on their geometric properties.
 
-### 3. Process Image
-- **Load and Resize the Image**
-- **Convert to Grayscale**
-- **Apply Gaussian Blur for Smoother Edges**
-- **Use Canny Edge Detection**
+### 2. Image Preprocessing
+The preprocessing steps prepare the image for contour detection.
+
+Resize the Image:
+```python
+image = cv2.imread("scanned-form.jpg")
+image = cv2.resize(image, (1300, 800))
+cv2.imwrite("resized_image.jpg", image)
+```
+Ensures a consistent input size for predictable processing and Resized image saved as resized_image.jpg.
+
+Convert to Grayscale:
+
+```python
+gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+cv2.imwrite("gray_image.jpg", gray)
+```
+
+Simplifies the image for edge detection.
+
+Apply Gaussian Blur:
+
+```python
+blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+cv2.imwrite("blurred_image.jpg", blurred)
+```
+
+Reduces noise and smooths the image.
+
+Apply Edge Detection:
+
+```python
+edged = cv2.Canny(blurred, 30, 50)
+cv2.imwrite("edged_image.jpg", edged)
+```
+Highlights the edges of the document.
+
+### 3. Edge Detection and Contour Analysis
+Find Contours:
+```python
+contours, hierarchy = cv2.findContours(edged, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+contours = sorted(contours, key=cv2.contourArea, reverse=True)
+```
+Identifies the boundaries of objects in the image.
+
+Identify the Document Contour:
+```python
+for c in contours:
+    p = cv2.arcLength(c, True)
+    approx = cv2.approxPolyDP(c, 0.02 * p, True)
+
+    if len(approx) == 4:
+        target = approx
+        break
+```
+
+The document contour is the largest contour with four corners.
+
+### 4. Perspective Transformation
+```python
+approx = mapp(target)
+pts = np.float32([[0, 0], [800, 0], [800, 800], [0, 800]])
+op = cv2.getPerspectiveTransform(approx, pts)
+dst = cv2.warpPerspective(orig, op, (800, 800))
+
+cv2.imwrite("scanned_output.jpg", dst)
+```
+
+Converts the document to a top-down view and Transformed document saved as scanned_output.jpg.
+
+
+
+
